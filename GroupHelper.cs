@@ -1,8 +1,11 @@
 public static class GroupHelper
 {
-    public static void Print(Dictionary<int, int> keyValues, int startIndex, int groupLen,
-         string keyAlias, string valueAlias, string valueSuffix, string aggregateAlias, Func<Dictionary<int, int>, double> aggregateFn)
+    public static void Print(Dictionary<int, double> keyValues, int startIndex, int groupLen,
+         string keyAlias, string valueAlias, string valueSuffix, string aggregateAlias, string aggregateSuffix, Func<Dictionary<int, double>, double> aggregateFn)
     {
+        var super_i = 0;
+        var super_aggrs = new Dictionary<int, double>();
+
         for (int i = startIndex; i < keyValues.Count; i += groupLen)
         {
             Console.WriteLine("_______________________________________");
@@ -10,22 +13,26 @@ public static class GroupHelper
 
             var g_pairs = keyValues.Skip(i).Take(groupLen).ToDictionary(x => x.Key, x => x.Value);
 
-            Console.WriteLine("group-" + (i / groupLen + 1).ToString("00") + ":");
+            Console.WriteLine("[group-" + (super_i / groupLen + 1).ToString("00") + "]");
 
             var sub_i = 0;
             foreach (var kvp in g_pairs)
             {
                 sub_i++;
-                Console.WriteLine($"{sub_i}.{keyAlias}: {kvp.Key} => {valueAlias}: {kvp.Value}{valueSuffix}");
+                super_aggrs.Add(kvp.Key, kvp.Value);
+                Console.WriteLine($"{super_i + sub_i}.{keyAlias}: {kvp.Key} => {valueAlias}: {kvp.Value}{valueSuffix}");
             }
+            super_i += sub_i;
 
-            Console.WriteLine($"{aggregateAlias}: {aggregateFn(g_pairs)}{valueSuffix}");
             Console.WriteLine();
+            Console.WriteLine($"->{aggregateAlias}: {(aggregateFn(g_pairs))}{aggregateSuffix} (in {sub_i} {keyAlias}s)");
+
+            Console.WriteLine($"  {aggregateAlias.ToUpper()}: {(aggregateFn(super_aggrs))}{aggregateSuffix.ToUpper()} (in {super_i} {keyAlias.ToUpper()}S)");
         }
     }
 
-    public static void CheckAgg(Dictionary<int, int> keyValues, int startIndex, int groupLen,
-        ref bool checkResult, Func<Dictionary<int, int>, bool> invalidityPred)
+    public static void CheckAgg(Dictionary<int, double> keyValues, int startIndex, int groupLen,
+        ref bool checkResult, Func<Dictionary<int, double>, bool> invalidityPred)
     {
         for (int i = startIndex; i < keyValues.Count; i += groupLen)
         {
@@ -44,38 +51,38 @@ public static class GroupHelper
 
 public static class GroupCombinator
 {
-    public static void PrintCombinations(Dictionary<int, int> keyValues, int minGroupLen, int maxGroupLen,
-        string keyAlias, string valueAlias, string valueSuffix, string aggregateAlias,
-        Func<Dictionary<int, int>, double> aggregateFn, bool checkInvalidity,
-        Func<Dictionary<int, int>, bool> invalidityPred)
+    public static void PrintCombinations(Dictionary<int, double> keyValues, int minGroupLen, int maxGroupLen,
+        string keyAlias, string valueAlias, string valueSuffix, string aggregateAlias, string aggregateSuffix,
+        Func<Dictionary<int, double>, double> aggregateFn, bool checkInvalidity,
+        Func<Dictionary<int, double>, bool> invalidityPred, int? startKey = null)
     {
-        Console.WriteLine($"TOTAL {valueAlias.ToUpper()} (IN {keyValues.Count} {keyAlias.ToUpper()}S): {aggregateFn(keyValues)}{valueSuffix}");
-        Console.WriteLine();
+        var fnCombinate = (int startIndex, int groupLen) =>
+        {
+            Console.WriteLine("############################################");
+            Console.WriteLine();
+            Console.WriteLine($"[GROUP_SIZE: {groupLen}; START_{keyAlias.ToUpper()}: {keyValues.Keys.ElementAt(startIndex)}]");
+
+            bool conditionResult = false;
+
+            GroupHelper.CheckAgg(keyValues, startIndex, groupLen,
+                ref conditionResult, invalidityPred);
+
+            if (checkInvalidity && conditionResult)
+                System.Console.WriteLine("<skipped>!\n");
+            else
+                GroupHelper.Print(keyValues, startIndex, groupLen, keyAlias,
+                    valueAlias, valueSuffix, aggregateAlias, aggregateSuffix, aggregateFn);
+        };
+
+        int start_index_pick = keyValues.Keys.ToList().IndexOf(startKey ?? 0);
 
         for (int groupLen = minGroupLen; groupLen <= maxGroupLen; groupLen++)
         {
-            for (int startIndex = 0; startIndex < groupLen; startIndex++)
-            {
-                Console.WriteLine("############################################");
-                Console.WriteLine();
-                Console.WriteLine($"[GROUP_SIZE: {groupLen}; START_{keyAlias.ToUpper()}: {keyValues.Keys.ElementAt(startIndex)}]");
-
-                bool conditionResult = false;
-
-                GroupHelper.CheckAgg(keyValues, startIndex, groupLen,
-                    ref conditionResult, invalidityPred);
-
-                if (checkInvalidity && conditionResult)
-                {
-                    System.Console.WriteLine("<skipped>!");
-                    Console.WriteLine();
-                }
-                else
-                {
-                    GroupHelper.Print(keyValues, startIndex, groupLen, keyAlias,
-                        valueAlias, valueSuffix, aggregateAlias, aggregateFn);
-                }
-            }
+            if (start_index_pick != -1)
+                fnCombinate(start_index_pick, groupLen);
+            else
+                for (int startIndex = 0; startIndex < groupLen; startIndex++)
+                    fnCombinate(startIndex, groupLen);
         }
     }
 
